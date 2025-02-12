@@ -15,13 +15,34 @@ public abstract class AbstractSkateboard : MonoBehaviour
     private Coroutine resetSpeedCoroutine;
 
     // Core movement and jump variables
-    [SerializeField] protected float moveSpeed = 3.5f;
-    [SerializeField] protected float sprintSpeed = 5.5f;
+    [SerializeField] protected float moveSpeed = 100f;
+    [SerializeField] protected float sprintSpeed = 20f;
     [SerializeField] protected float rotationSpeed = 4f;
     [SerializeField] protected Transform cameraTransform;
     [SerializeField] protected float jumpForce = 5f;
     [SerializeField] protected Transform skateboardD;  // Reference to the player's skateboard model
     [SerializeField] protected Transform CharacterModel; // Reference to the character's body model
+
+    // Try for inertial
+    [SerializeField] private float acceleration = 2f;
+    [SerializeField] private float deceleration = 2f;
+    [SerializeField] private float maxSpeed = 5f;
+    private float currentSpeed = 0f;
+
+    // Speed boost
+    [SerializeField] private float maxBoostSpeed = 10f; // Maximum speed the player can reach
+    [SerializeField] private float boostDuration = 2f; // A short burst of speed
+    private float currentBoostSpeed = 0f; // Track the current boost speed
+    [SerializeField] private float boostIncrement = 5f; // Speed increment for each kick
+    [SerializeField] private float boostDecayRate = 2f; // Rate at which the boost decays over time
+    private float currentMovementSpeed = 0f; // Track the current movement speed
+    [SerializeField] private float boostDelay = 0.2f; // Delay before boosting to sync with animation
+
+
+    private bool isBoosting = false;
+    [SerializeField] private Animator animator;
+
+
 
     // Movement-related fields
     protected Rigidbody rb;
@@ -77,18 +98,69 @@ public abstract class AbstractSkateboard : MonoBehaviour
     // Core movement handling (WASD, jump)
     protected virtual void HandleMovement()
     {
-        float currentSpeed = Input.GetKey(KeyCode.LeftShift) ? sprintSpeed : moveSpeed;
-
         Vector3 direction = GetMovementDirection();
 
         if (direction != Vector3.zero)
         {
             targetRotation = Quaternion.LookRotation(direction);
-            MoveCharacter(currentSpeed);
         }
 
+        // Handle boosting
+        if (Input.GetMouseButtonDown(1) && !isBoosting) // Right-click to boost
+        {
+            StartCoroutine(Boost());
+        }
+
+        // Apply the current movement speed and decay over time
+        if (isBoosting || currentMovementSpeed > 0f)
+        {
+            currentSpeed = currentMovementSpeed;
+            currentMovementSpeed = Mathf.MoveTowards(currentMovementSpeed, 0f, boostDecayRate * Time.deltaTime);
+        }
+        else
+        {
+            // Decelerate when not boosting
+            currentSpeed = Mathf.MoveTowards(currentSpeed, 0f, deceleration * Time.deltaTime);
+        }
+
+        MoveCharacter(currentSpeed);
         RotateCharacter();
     }
+
+
+
+
+
+
+    private IEnumerator Boost()
+    {
+        if (animator != null)
+        {
+            animator.SetTrigger("Boost");
+        }
+
+        yield return new WaitForSeconds(boostDelay); // Wait for the delay before boosting
+
+        isBoosting = true;
+
+        // Add the boost increment to the current movement speed
+        currentMovementSpeed += boostIncrement;
+
+        yield return new WaitForSeconds(boostDuration);
+        isBoosting = false;
+
+        if (animator != null)
+        {
+            animator.ResetTrigger("Boost");
+        }
+    }
+
+
+
+
+
+
+
 
     protected virtual void HandleJump()
     {
@@ -116,13 +188,18 @@ public abstract class AbstractSkateboard : MonoBehaviour
         if (Input.GetKey(KeyCode.A)) direction -= right;
         if (Input.GetKey(KeyCode.D)) direction += right;
 
-        return direction;
+        return direction.normalized; // Ensure normalized direction
     }
+
 
     private void RotateCharacter()
     {
-        transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+        if (targetRotation != transform.rotation)
+        {
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+        }
     }
+
 
     private void MoveCharacter(float speed)
     {
@@ -274,7 +351,7 @@ public abstract class AbstractSkateboard : MonoBehaviour
 
         if (Input.GetKeyDown(KeyCode.M))
         {
-            LoadPlayerData();
+            LoadPlayerData(); 
         }
     }
 }
