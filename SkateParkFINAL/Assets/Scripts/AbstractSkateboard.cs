@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Collections;
 using UnityEngine.SceneManagement;
 
@@ -24,23 +24,50 @@ public abstract class AbstractSkateboard : MonoBehaviour
     [SerializeField] protected Transform CharacterModel; // Reference to the character's body model
 
     // Try for inertial
-    [SerializeField] private float acceleration = 2f;
     [SerializeField] private float deceleration = 2f;
-    [SerializeField] private float maxSpeed = 5f;
     private float currentSpeed = 0f;
 
     // Speed boost
-    [SerializeField] private float maxBoostSpeed = 10f; // Maximum speed the player can reach
     [SerializeField] private float boostDuration = 2f; // A short burst of speed
-    private float currentBoostSpeed = 0f; // Track the current boost speed
     [SerializeField] private float boostIncrement = 5f; // Speed increment for each kick
     [SerializeField] private float boostDecayRate = 2f; // Rate at which the boost decays over time
     private float currentMovementSpeed = 0f; // Track the current movement speed
     [SerializeField] private float boostDelay = 0.2f; // Delay before boosting to sync with animation
 
 
+
     private bool isBoosting = false;
+
+    [SerializeField] private float boostCooldown = 1f; // Cooldown period between boosts
+    private bool isOnCooldown = false; // Track if the boost is on cooldown
+
     [SerializeField] private Animator animator;
+
+    //Jump
+    private bool isCrouching = false;
+
+    [SerializeField] private float jumpDelay = 0.2f;
+
+
+    [SerializeField] private float crouchDelay = 0.2f;
+    [SerializeField] private float crouchDuration = 0.2f;
+    [SerializeField] private float crouchCooldown = 0f;
+    [SerializeField] private float jumpCooldown = 0;
+
+    private bool isBoostOnCooldown = false;
+    private bool isCrouchOnCooldown = false;
+    private bool isJumpOnCooldown = false;
+
+    // Animator parameters
+    [SerializeField] private float fallDuration = 0.2f;
+    [SerializeField] private float landDuration = 0.2f;
+    [SerializeField] private float impactVelocityThreshold = 10f; // Adjust as needed
+
+    //Break
+    [SerializeField] private float brakeDamping = 0.5f; // Adjust the damping value as needed
+
+
+
 
 
 
@@ -95,6 +122,27 @@ public abstract class AbstractSkateboard : MonoBehaviour
         }
     }
 
+    private void ResetAnimation(string animationName)
+    {
+        if (animator != null)
+        {
+            // Ensure that the state name and layer index are correct
+            if (animator.HasState(0, Animator.StringToHash(animationName)))
+            {
+                animator.Play(animationName, 0, 0f); // Reset the animation to the start
+            }
+            else
+            {
+                Debug.LogWarning($"Animator does not have a state named '{animationName}' in layer 0.");
+            }
+        }
+    }
+
+
+
+
+
+
     // Core movement handling (WASD, jump)
     protected virtual void HandleMovement()
     {
@@ -106,7 +154,7 @@ public abstract class AbstractSkateboard : MonoBehaviour
         }
 
         // Handle boosting
-        if (Input.GetMouseButtonDown(1) && !isBoosting) // Right-click to boost
+        if (Input.GetMouseButtonDown(1) && !isBoosting && !isBoostOnCooldown) // Right-click to boost
         {
             StartCoroutine(Boost());
         }
@@ -132,31 +180,74 @@ public abstract class AbstractSkateboard : MonoBehaviour
 
 
 
+
     private IEnumerator Boost()
     {
         if (animator != null)
         {
-            animator.SetTrigger("Boost");
+            animator.ResetTrigger("Boost");
+            animator.Play("Boost", 0, 0f);
         }
 
         yield return new WaitForSeconds(boostDelay); // Wait for the delay before boosting
 
         isBoosting = true;
-
-        // Add the boost increment to the current movement speed
-        currentMovementSpeed += boostIncrement;
+        isBoostOnCooldown = true;
+        currentMovementSpeed += boostIncrement; // Add the boost increment to the current movement speed
 
         yield return new WaitForSeconds(boostDuration);
+
         isBoosting = false;
 
         if (animator != null)
         {
+            // Allow the animation to complete and reset without re-triggering it
             animator.ResetTrigger("Boost");
         }
+
+        yield return new WaitForSeconds(boostCooldown); // Wait for the cooldown period
+        isBoostOnCooldown = false; // Cooldown finished
     }
 
 
 
+
+
+
+
+
+
+
+
+
+
+    private IEnumerator CrouchCoroutine()
+    {
+        if (animator != null)
+        {
+            animator.ResetTrigger("CrouchStart");
+            animator.Play("CrouchStart", 0, 0f);
+            // No need to set the trigger again here as Play already initiates the animation
+        }
+
+        yield return new WaitForSeconds(crouchDelay);
+
+        isCrouching = true;
+        isCrouchOnCooldown = true;
+
+        yield return new WaitForSeconds(crouchDuration);
+        isCrouching = false;
+
+        yield return new WaitForEndOfFrame();
+
+        if (animator != null)
+        {
+            animator.ResetTrigger("CrouchStart");
+        }
+
+        yield return new WaitForSeconds(crouchCooldown);
+        isCrouchOnCooldown = false;
+    }
 
 
 
@@ -164,12 +255,62 @@ public abstract class AbstractSkateboard : MonoBehaviour
 
     protected virtual void HandleJump()
     {
-        if (Input.GetKeyDown(KeyCode.Space) && isGrounded)
+        if (Input.GetKeyDown(KeyCode.C) && isGrounded && !isCrouching && !isCrouchOnCooldown)
         {
-            Jump();
-            isGrounded = false;
+            StartCoroutine(CrouchCoroutine()); // Start crouching coroutine
+        }
+
+        if (Input.GetKeyDown(KeyCode.Space) && isGrounded && !isCrouching && !isJumpOnCooldown)
+        {
+            StartCoroutine(JumpCoroutine()); // Start jump coroutine
         }
     }
+
+
+
+
+
+
+
+    private IEnumerator JumpCoroutine()
+    {
+        if (animator != null)
+        {
+            animator.ResetTrigger("Jump");
+            animator.Play("Jump", 0, 0f);
+            // No need to set the trigger again here as Play already initiates the animation
+        }
+
+        yield return new WaitForSeconds(jumpDelay);
+
+        Jump(); // Ensure the actual jumping logic is called here
+        isJumpOnCooldown = true;
+
+        yield return new WaitForEndOfFrame(); // Ensure the animation fully plays before resetting
+
+        if (animator != null)
+        {
+            animator.ResetTrigger("Jump");
+        }
+
+        yield return new WaitForSeconds(jumpCooldown);
+        isJumpOnCooldown = false;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     private Vector3 GetMovementDirection()
     {
@@ -222,6 +363,7 @@ public abstract class AbstractSkateboard : MonoBehaviour
         if (collision.gameObject.CompareTag("Ground") || collision.gameObject.CompareTag("Carousel") || collision.gameObject.CompareTag("RedGreen"))
         {
             isGrounded = true; // Reset the grounded flag when touching the ground
+
             Debug.Log("grounded");
             Debug.Log("can flip");
 
@@ -237,6 +379,11 @@ public abstract class AbstractSkateboard : MonoBehaviour
                 canFlip = true; // Allow the player to flip again after landing
                 hasJumped = false; // Reset the jump state, ensuring another jump is required to flip
             }
+        }else if (collision.relativeVelocity.magnitude >= impactVelocityThreshold)
+        {
+            Debug.Log("Collision detected with sufficient velocity!");
+            EnableRagdoll();
+            StartCoroutine(WaitForRagdollToSettle());
         }
         else if (collision.gameObject.CompareTag("Death"))
         {
@@ -248,6 +395,63 @@ public abstract class AbstractSkateboard : MonoBehaviour
             SceneManager.LoadScene("EndMenu");
         }
     }
+
+    private void EnableRagdoll()
+    {
+        foreach (Rigidbody rb in GetComponentsInChildren<Rigidbody>())
+        {
+            rb.isKinematic = false;
+            rb.useGravity = true;
+        }
+
+        animator.enabled = false; // Disable animator to let the ragdoll take over
+    }
+
+    private void DisableRagdoll()
+    {
+        foreach (Rigidbody rb in GetComponentsInChildren<Rigidbody>())
+        {
+            rb.isKinematic = true;
+            rb.useGravity = false;
+        }
+
+        animator.enabled = true; // Re-enable animator
+    }
+
+    private IEnumerator WaitForRagdollToSettle()
+    {
+        bool isSettled = false;
+
+        while (!isSettled)
+        {
+            yield return new WaitForSeconds(0.5f); // Check every 0.5 seconds
+
+            float totalVelocity = 0f;
+            foreach (Rigidbody rb in GetComponentsInChildren<Rigidbody>())
+            {
+                totalVelocity += rb.velocity.magnitude;
+            }
+
+            if (totalVelocity < 0.1f) // Adjust the threshold for "settled" as needed
+            {
+                isSettled = true;
+            }
+        }
+
+        DisableRagdoll();
+        PlayRisingAnimation();
+    }
+
+    private void PlayRisingAnimation()
+    {
+        if (animator != null)
+        {
+            animator.Play("Rising", 0, 0f);
+            Debug.Log("Rising animation playing!");
+        }
+    }
+
+
 
     protected void OnCollisionStay(Collision collision)
     {
@@ -343,6 +547,10 @@ public abstract class AbstractSkateboard : MonoBehaviour
             isGrinding = false;
             PerformGrind(); // Reset to original rotation when LeftControl is released
         }
+        if (Input.GetKey(KeyCode.LeftControl))
+        {
+            ApplyBrake(); // Apply brake when Left Control is held down
+        }
 
         if (Input.GetKeyDown(KeyCode.X))
         {
@@ -351,7 +559,91 @@ public abstract class AbstractSkateboard : MonoBehaviour
 
         if (Input.GetKeyDown(KeyCode.M))
         {
-            LoadPlayerData(); 
+            LoadPlayerData();
+        }
+
+        // Ensure the isGrounded flag is being updated correctly
+        UpdateGroundedStatus();
+
+        // Detect falling
+        if (!isFalling && rb.velocity.y < 0 && !isGrounded)
+        {
+            isFalling = true;
+            Debug.Log("Falling detected!");
+            StartCoroutine(FallCoroutine()); // Start falling coroutine
+        }
+
+        // Detect landing
+        if (isGrounded && rb.velocity.y == 0 && isFalling)
+        {
+            isFalling = false;
+            Debug.Log("Landing detected!");
+            StartCoroutine(LandCoroutine()); // Start landing coroutine
         }
     }
+
+    private void ApplyBrake()
+    {
+        if (currentMovementSpeed > 0f)
+        {
+            currentMovementSpeed = Mathf.MoveTowards(currentMovementSpeed, 0f, brakeDamping * Time.deltaTime);
+            Debug.Log("Applying brake: " + currentMovementSpeed);
+        }
+    }
+
+
+
+    private void UpdateGroundedStatus()
+    {
+        // Update the isGrounded flag based on collision detection or raycast
+        // Example implementation:
+        RaycastHit hit;
+        float distanceToGround = 1.0f; // Adjust based on your character's height
+        if (Physics.Raycast(transform.position, Vector3.down, out hit, distanceToGround))
+        {
+            isGrounded = hit.collider != null;
+        }
+        else
+        {
+            isGrounded = false;
+        }
+    }
+
+    private bool isFalling = false;
+
+    private IEnumerator FallCoroutine()
+    {
+        if (animator != null)
+        {
+            animator.ResetTrigger("Fall");
+            animator.Play("Fall", 0, 0f);
+            Debug.Log("Fall animation!");
+        }
+
+        yield return new WaitForSeconds(fallDuration); // Adjust as needed
+
+        if (animator != null)
+        {
+            animator.ResetTrigger("Fall");
+        }
+    }
+
+    private IEnumerator LandCoroutine()
+    {
+        if (animator != null)
+        {
+            animator.ResetTrigger("Land");
+            animator.Play("Land", 0, 0f);
+            Debug.Log("Land animation!");
+        }
+
+        yield return new WaitForSeconds(landDuration); // Adjust as needed
+
+        if (animator != null)
+        {
+            animator.ResetTrigger("Land");
+        }
+    }
+
+
 }

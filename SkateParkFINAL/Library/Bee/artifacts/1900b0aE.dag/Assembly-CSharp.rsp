@@ -360,6 +360,7 @@
 "Assets/Scripts/GlassDestroy.cs"
 "Assets/Scripts/LeftRightMovement.cs"
 "Assets/Scripts/PauseMenu.cs"
+"Assets/Scripts/PingPongAnimation.cs"
 "Assets/Scripts/Player456.cs"
 "Assets/Scripts/PlayerMovement.cs"
 "Assets/Scripts/RedGreen.cs"
