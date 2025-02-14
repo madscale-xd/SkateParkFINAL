@@ -13,7 +13,6 @@ public class Player456 : AbstractSkateboard
         // Check if 'R' is pressed to perform a special move (360 flip + jump)
         if (Input.GetKeyDown(KeyCode.R))
         {
-            // Only allow a flip if the player has jumped and is grounded (to ensure they flip after jumping)
             if (hasJumped && !isGrounded && canFlip)
             {
                 PerformSpecialMove();
@@ -22,35 +21,36 @@ public class Player456 : AbstractSkateboard
         }
     }
 
-    // Perform a special move: 360 flip in the X direction + jump
+    // Perform a special move: 360 flip in the SIDE direction + jump
     protected override void PerformSpecialMove()
     {
         if (WholeCharacter != null)
         {
-            // Start a coroutine to smoothly rotate the player model 360 degrees around the X-axis and apply a jump
             StartCoroutine(Flip360AndJump());
         }
     }
 
     private IEnumerator Flip360AndJump()
     {
-        // Apply the upward jump force
-        rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
-
         float rotationAmount = 0f;
 
-        // Rotate the player model in the X direction while jumping
+        // Rotate the player model in the **Z-axis** for a kickflip-style rotation
+        Vector3 rotationAxis = Vector3.forward; // Forward (Z-axis) for a kickflip, or change to Vector3.up for a pop shove-it
+
+        // Rotate the player model in the selected axis while jumping
         while (rotationAmount < 360f)
         {
-            // Rotate the player model in the X direction
-            WholeCharacter.Rotate(Vector3.right * flipSpeed * Time.deltaTime);
+            WholeCharacter.Rotate(rotationAxis * flipSpeed * Time.deltaTime);
             rotationAmount += flipSpeed * Time.deltaTime;
 
-            // Wait for the next frame
             yield return null;
         }
 
         // Ensure the final rotation is exactly 360 degrees
-        WholeCharacter.rotation = Quaternion.Euler(WholeCharacter.rotation.eulerAngles.x + 360f, WholeCharacter.rotation.eulerAngles.y, WholeCharacter.rotation.eulerAngles.z);
+        WholeCharacter.rotation = Quaternion.Euler(
+            WholeCharacter.rotation.eulerAngles.x,
+            WholeCharacter.rotation.eulerAngles.y,
+            WholeCharacter.rotation.eulerAngles.z + 360f // Change this depending on the chosen axis
+        );
     }
 }

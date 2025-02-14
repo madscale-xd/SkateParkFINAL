@@ -11,6 +11,7 @@ TagManager:
   - Carousel
   - RedGreen
   - FinishLine
+  - Grinder
   layers:
   - Default
   - TransparentFX

@@ -4,6 +4,10 @@ using UnityEngine.SceneManagement;
 
 public abstract class AbstractSkateboard : MonoBehaviour
 {
+    private Vector3 grindDirection;
+    private float grindSpeed;
+    private int groundContacts = 0;
+    private int grindContacts = 0;
     // Player stats
     public string playerName;
     public float health;
@@ -33,9 +37,6 @@ public abstract class AbstractSkateboard : MonoBehaviour
     [SerializeField] private float boostDecayRate = 2f; // Rate at which the boost decays over time
     private float currentMovementSpeed = 0f; // Track the current movement speed
     [SerializeField] private float boostDelay = 0.2f; // Delay before boosting to sync with animation
-
-
-
     private bool isBoosting = false;
 
     [SerializeField] private float boostCooldown = 1f; // Cooldown period between boosts
@@ -61,15 +62,10 @@ public abstract class AbstractSkateboard : MonoBehaviour
     // Animator parameters
     [SerializeField] private float fallDuration = 0.2f;
     [SerializeField] private float landDuration = 0.2f;
-    [SerializeField] private float impactVelocityThreshold = 10f; // Adjust as needed
+    [SerializeField] private float impactVelocityThreshold = 100000f; // Adjust as needed
 
     //Break
     [SerializeField] private float brakeDamping = 0.5f; // Adjust the damping value as needed
-
-
-
-
-
 
     // Movement-related fields
     protected Rigidbody rb;
@@ -90,6 +86,7 @@ public abstract class AbstractSkateboard : MonoBehaviour
     {
         rb = GetComponent<Rigidbody>();
         targetRotation = transform.rotation;
+        originalRotation = transform.rotation;
 
         spawner = GameObject.Find("Skatepark").GetComponent<DeathAndRespawn>();
         rg = GameObject.Find("RedGreen").GetComponent<RedGreen>();
@@ -138,11 +135,6 @@ public abstract class AbstractSkateboard : MonoBehaviour
         }
     }
 
-
-
-
-
-
     // Core movement handling (WASD, jump)
     protected virtual void HandleMovement()
     {
@@ -154,31 +146,29 @@ public abstract class AbstractSkateboard : MonoBehaviour
         }
 
         // Handle boosting
-        if (Input.GetMouseButtonDown(1) && !isBoosting && !isBoostOnCooldown) // Right-click to boost
+        if (Input.GetMouseButtonDown(1) && !isBoosting && !isBoostOnCooldown && isGrounded) // Right-click to boost
         {
             StartCoroutine(Boost());
         }
 
-        // Apply the current movement speed and decay over time
-        if (isBoosting || currentMovementSpeed > 0f)
+        // Only apply movement decay when NOT grinding
+        if (!isGrinding)
         {
-            currentSpeed = currentMovementSpeed;
-            currentMovementSpeed = Mathf.MoveTowards(currentMovementSpeed, 0f, boostDecayRate * Time.deltaTime);
-        }
-        else
-        {
-            // Decelerate when not boosting
-            currentSpeed = Mathf.MoveTowards(currentSpeed, 0f, deceleration * Time.deltaTime);
+            if (isBoosting || currentMovementSpeed > 0f)
+            {
+                currentSpeed = currentMovementSpeed;
+                currentMovementSpeed = Mathf.MoveTowards(currentMovementSpeed, 0f, boostDecayRate * Time.deltaTime);
+            }
+            else
+            {
+                // Decelerate when not boosting
+                currentSpeed = Mathf.MoveTowards(currentSpeed, 0f, deceleration * Time.deltaTime);
+            }
         }
 
         MoveCharacter(currentSpeed);
         RotateCharacter();
     }
-
-
-
-
-
 
 
     private IEnumerator Boost()
@@ -209,18 +199,6 @@ public abstract class AbstractSkateboard : MonoBehaviour
         isBoostOnCooldown = false; // Cooldown finished
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
     private IEnumerator CrouchCoroutine()
     {
         if (animator != null)
@@ -249,10 +227,6 @@ public abstract class AbstractSkateboard : MonoBehaviour
         isCrouchOnCooldown = false;
     }
 
-
-
-
-
     protected virtual void HandleJump()
     {
         if (Input.GetKeyDown(KeyCode.C) && isGrounded && !isCrouching && !isCrouchOnCooldown)
@@ -265,12 +239,6 @@ public abstract class AbstractSkateboard : MonoBehaviour
             StartCoroutine(JumpCoroutine()); // Start jump coroutine
         }
     }
-
-
-
-
-
-
 
     private IEnumerator JumpCoroutine()
     {
@@ -296,21 +264,6 @@ public abstract class AbstractSkateboard : MonoBehaviour
         yield return new WaitForSeconds(jumpCooldown);
         isJumpOnCooldown = false;
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     private Vector3 GetMovementDirection()
     {
@@ -344,8 +297,28 @@ public abstract class AbstractSkateboard : MonoBehaviour
 
     private void MoveCharacter(float speed)
     {
+        // Move forward
         Vector3 movement = transform.forward * speed * Time.deltaTime;
         rb.MovePosition(rb.position + movement);
+
+        // Adjust rotation based on the platform's normal
+        AdjustRotationToGround();
+    }
+
+    private void AdjustRotationToGround()
+    {
+        RaycastHit hit;
+        if (Physics.Raycast(transform.position, Vector3.down, out hit, 2f))
+        {
+            // Get ground normal
+            Vector3 groundNormal = hit.normal;
+
+            // Calculate new rotation
+            Quaternion targetRotation = Quaternion.FromToRotation(transform.up, groundNormal) * transform.rotation;
+
+            // Smoothly rotate towards the target rotation
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * 25f);
+        }
     }
 
     private void Jump()
@@ -353,22 +326,31 @@ public abstract class AbstractSkateboard : MonoBehaviour
         hasJumped = true;
         rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
     }
-
-    // Abstract method for collision exit logic (to be overridden in concrete class)
     
 
     // Override OnCollisionEnter to add specific collision behavior for PlayerMovement2
     protected void OnCollisionEnter(Collision collision)
     {
+        if (collision.gameObject.CompareTag("Grinder"))
+        {
+            grindContacts++; // Increase contact count
+
+            if (grindContacts == 1) // Start grinding only on the first contact
+            {
+                StartGrinding();
+            }
+        }
         if (collision.gameObject.CompareTag("Ground") || collision.gameObject.CompareTag("Carousel") || collision.gameObject.CompareTag("RedGreen"))
         {
             isGrounded = true; // Reset the grounded flag when touching the ground
 
             Debug.Log("grounded");
             Debug.Log("can flip");
+            StartCoroutine(LandCoroutine());
 
             if (collision.gameObject.CompareTag("Ground"))
             {
+                groundContacts++;
                 groundTouch = true;
                 if (rg != null)
                 {
@@ -382,8 +364,8 @@ public abstract class AbstractSkateboard : MonoBehaviour
         }else if (collision.relativeVelocity.magnitude >= impactVelocityThreshold)
         {
             Debug.Log("Collision detected with sufficient velocity!");
-            EnableRagdoll();
-            StartCoroutine(WaitForRagdollToSettle());
+            //EnableRagdoll();
+            //StartCoroutine(WaitForRagdollToSettle());
         }
         else if (collision.gameObject.CompareTag("Death"))
         {
@@ -481,6 +463,19 @@ public abstract class AbstractSkateboard : MonoBehaviour
 
     protected void OnCollisionExit(Collision collision)
     {
+        if (collision.gameObject.CompareTag("Grinder"))
+        {
+            StartCoroutine(DelayedGrindExit());
+        }
+        if (collision.gameObject.CompareTag("Ground"))
+        {
+            groundContacts--; // Decrease ground contact count
+
+            if (groundContacts <= 0) // Only trigger falling if no ground objects remain
+            {
+                StartCoroutine(FallCoroutine());
+            }
+        }
         if (collision.gameObject.CompareTag("Carousel"))
         {
             resetSpeedCoroutine = StartCoroutine(ResetSpeedAfterDelay());
@@ -502,33 +497,6 @@ public abstract class AbstractSkateboard : MonoBehaviour
     }
 
     // Abstract methods for tricks and special moves
-    
-    protected void PerformGrind()
-    {
-        if (skateboardD != null)
-        {
-            if (isGrinding)  // While grinding, rotate relative to the target object's forward direction
-            {
-                // Get the target object's forward direction
-                Vector3 targetForward = CharacterModel.forward;
-
-                // Normalize to make sure the direction is uniform
-                targetForward.y = 0; // Prevent vertical tilt (we only want horizontal rotation)
-                targetForward.Normalize();
-
-                // Rotate the skateboard model 90 degrees relative to the target object's forward direction
-                skateboardD.rotation = Quaternion.LookRotation(targetForward) * Quaternion.Euler(0, 90, 0);
-            }
-            else  // When LeftControl is released, rotate back by 90 degrees from its current direction
-            {
-                // Get the current forward direction of the skateboard model
-                Vector3 currentForward = skateboardD.forward;
-
-                // Rotate back by 90 degrees relative to the current facing direction
-                skateboardD.rotation = Quaternion.LookRotation(currentForward) * Quaternion.Euler(0, -90, 0);
-            }
-        }
-    }
 
     protected abstract void PerformSpecialMove();
 
@@ -536,21 +504,6 @@ public abstract class AbstractSkateboard : MonoBehaviour
     {
         HandleMovement();
         HandleJump();
-
-        if (Input.GetKeyDown(KeyCode.LeftControl))
-        {
-            isGrinding = true;
-            PerformGrind();
-        }
-        else if (Input.GetKeyUp(KeyCode.LeftControl))
-        {
-            isGrinding = false;
-            PerformGrind(); // Reset to original rotation when LeftControl is released
-        }
-        if (Input.GetKey(KeyCode.LeftControl))
-        {
-            ApplyBrake(); // Apply brake when Left Control is held down
-        }
 
         if (Input.GetKeyDown(KeyCode.X))
         {
@@ -564,22 +517,6 @@ public abstract class AbstractSkateboard : MonoBehaviour
 
         // Ensure the isGrounded flag is being updated correctly
         UpdateGroundedStatus();
-
-        // Detect falling
-        if (!isFalling && rb.velocity.y < 0 && !isGrounded)
-        {
-            isFalling = true;
-            Debug.Log("Falling detected!");
-            StartCoroutine(FallCoroutine()); // Start falling coroutine
-        }
-
-        // Detect landing
-        if (isGrounded && rb.velocity.y == 0 && isFalling)
-        {
-            isFalling = false;
-            Debug.Log("Landing detected!");
-            StartCoroutine(LandCoroutine()); // Start landing coroutine
-        }
     }
 
     private void ApplyBrake()
@@ -590,8 +527,6 @@ public abstract class AbstractSkateboard : MonoBehaviour
             Debug.Log("Applying brake: " + currentMovementSpeed);
         }
     }
-
-
 
     private void UpdateGroundedStatus()
     {
@@ -645,5 +580,68 @@ public abstract class AbstractSkateboard : MonoBehaviour
         }
     }
 
+    void StartGrinding()
+    {
+        if (isGrinding) return; // Prevent duplicate calls
+        isGrinding = true;
+        rb.useGravity = false;
 
+        Vector3 targetForward = CharacterModel.forward;
+
+                // Normalize to make sure the direction is uniform
+                targetForward.y = 0; // Prevent vertical tilt (we only want horizontal rotation)
+                targetForward.Normalize();
+
+                // Rotate the skateboard model 90 degrees relative to the target object's forward direction
+                skateboardD.rotation = Quaternion.LookRotation(targetForward) * Quaternion.Euler(0, 90, 0);
+
+        // Capture the forward direction
+        grindDirection = transform.forward;
+        grindDirection.y = 0; // Flatten the movement
+        grindDirection.Normalize();
+
+        // Capture initial momentum
+        grindSpeed = rb.velocity.magnitude;
+        if (grindSpeed < 1f) grindSpeed = 5f; // Ensure a minimum speed
+
+        Debug.Log($"Started Grinding! Direction: {grindDirection}, Speed: {grindSpeed}");
+    }
+
+    void StopGrinding()
+    {
+        if (!isGrinding) return;
+         // Get the current forward direction of the skateboard model
+        Vector3 currentForward = skateboardD.forward;
+
+        // Rotate back by 90 degrees relative to the current facing direction
+        skateboardD.rotation = Quaternion.LookRotation(currentForward) * Quaternion.Euler(0, -90, 0);
+        isGrinding = false;
+        rb.useGravity = true;
+
+        // Reset position and rotation to original values
+        rb.velocity = Vector3.zero; // Stop movement
+
+        Debug.Log("Stopped Grinding! Resetting position.");
+    }
+
+    void FixedUpdate()
+    {
+        if (isGrinding)
+        {
+            rb.velocity = grindDirection * grindSpeed; // Maintain steady forward movement
+            Debug.Log($"Grinding... Velocity: {rb.velocity}");
+        }
+    }
+
+    private IEnumerator DelayedGrindExit()
+    {
+        yield return new WaitForSeconds(0.25f); // Wait for 0.5 seconds
+
+        grindContacts--; // Decrease grind contact count after delay
+
+        if (grindContacts <= 0) // Only stop grinding if no grind contacts remain
+        {
+            StopGrinding();
+        }
+    }
 }
