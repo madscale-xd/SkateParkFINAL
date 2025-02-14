@@ -12,6 +12,7 @@ TagManager:
   - RedGreen
   - FinishLine
   - Grinder
+  - Upwards
   layers:
   - Default
   - TransparentFX

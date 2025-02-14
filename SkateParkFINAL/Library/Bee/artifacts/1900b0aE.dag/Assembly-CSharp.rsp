@@ -357,6 +357,7 @@
 "Assets/Scripts/CameraFollow.cs"
 "Assets/Scripts/CarouselRotate.cs"
 "Assets/Scripts/DeathAndRespawn.cs"
+"Assets/Scripts/DisableTriggerTemp.cs"
 "Assets/Scripts/GlassDestroy.cs"
 "Assets/Scripts/LeftRightMovement.cs"
 "Assets/Scripts/PauseMenu.cs"

@@ -4,6 +4,8 @@ using UnityEngine.SceneManagement;
 
 public abstract class AbstractSkateboard : MonoBehaviour
 {
+    private bool jumpPressed = false;
+    private float upwardForce = 50f;
     private Vector3 grindDirection;
     private float grindSpeed;
     private int groundContacts = 0;
@@ -53,7 +55,7 @@ public abstract class AbstractSkateboard : MonoBehaviour
     [SerializeField] private float crouchDelay = 0.2f;
     [SerializeField] private float crouchDuration = 0.2f;
     [SerializeField] private float crouchCooldown = 0f;
-    [SerializeField] private float jumpCooldown = 0;
+    [SerializeField] private float jumpCooldown = 2f;
 
     private bool isBoostOnCooldown = false;
     private bool isCrouchOnCooldown = false;
@@ -234,9 +236,10 @@ public abstract class AbstractSkateboard : MonoBehaviour
             StartCoroutine(CrouchCoroutine()); // Start crouching coroutine
         }
 
-        if (Input.GetKeyDown(KeyCode.Space) && isGrounded && !isCrouching && !isJumpOnCooldown)
+        if (Input.GetKeyDown(KeyCode.Space) && isGrounded && !jumpPressed && !isCrouching && !isJumpOnCooldown)
         {
-            StartCoroutine(JumpCoroutine()); // Start jump coroutine
+            jumpPressed = true; // Prevent multiple jumps before landing
+            StartCoroutine(JumpCoroutine());
         }
     }
 
@@ -350,6 +353,7 @@ public abstract class AbstractSkateboard : MonoBehaviour
 
             if (collision.gameObject.CompareTag("Ground"))
             {
+                jumpPressed = false;
                 groundContacts++;
                 groundTouch = true;
                 if (rg != null)
@@ -626,12 +630,22 @@ public abstract class AbstractSkateboard : MonoBehaviour
 
     void FixedUpdate()
     {
-        if (isGrinding)
+        if (isGrinding) return; // Skip if grinding
+
+        RaycastHit hit;
+        float distance = rb.velocity.magnitude * Time.fixedDeltaTime; // Predict next frame movement
+
+        // SphereCast to predict collision in a wider range
+        if (Physics.SphereCast(rb.position, 0.5f, rb.velocity.normalized, out hit, distance))
         {
-            rb.velocity = grindDirection * grindSpeed; // Maintain steady forward movement
-            Debug.Log($"Grinding... Velocity: {rb.velocity}");
+            Debug.Log("Collision predicted with: " + hit.collider.name);
+            
+            // Stop movement at hit point
+            rb.position = hit.point - rb.velocity.normalized * 0.1f; // Slight offset to prevent sticking
+            rb.velocity = Vector3.zero; // Prevent further movement through objects
         }
     }
+
 
     private IEnumerator DelayedGrindExit()
     {
@@ -643,5 +657,19 @@ public abstract class AbstractSkateboard : MonoBehaviour
         {
             StopGrinding();
         }
+    }
+
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("Upwards"))
+        {
+            ApplyUpwardForce();
+        }
+    }
+
+    private void ApplyUpwardForce()
+    {
+        rb.velocity = new Vector3(rb.velocity.x, 2f, rb.velocity.z); // Reset vertical velocity to ensure consistent jump
+        rb.AddForce(Vector3.up * upwardForce, ForceMode.Impulse); // Apply instant upward force
     }
 }
