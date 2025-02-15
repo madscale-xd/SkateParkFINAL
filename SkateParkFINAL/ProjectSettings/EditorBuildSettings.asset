@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/Scenes/SkateparkFinal.unity
+    guid: a1fb2191f146481409deb74e3fbde952
+  - enabled: 1
     path: Assets/Scenes/MainMenu.unity
     guid: 390fd511749c7f84a9058949f1e3c78c
   - enabled: 1
@@ -13,5 +16,5 @@ EditorBuildSettings:
     guid: 9fc0d4010bbf28b4594072e72b8655ab
   - enabled: 1
     path: Assets/Scenes/EndMenu.unity
-    guid: 3b9b62b7b12732042af18964b1f8b2a3
+    guid: 16772e3f24797664aaa1f75702e804c8
   m_configObjects: {}

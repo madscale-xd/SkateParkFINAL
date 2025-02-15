@@ -13,9 +13,11 @@ public class Player456 : AbstractSkateboard
         // Check if 'R' is pressed to perform a special move (360 flip + jump)
         if (Input.GetKeyDown(KeyCode.R))
         {
-            if (hasJumped && !isGrounded && canFlip)
+            if (!isGrounded && canFlip)
             {
                 PerformSpecialMove();
+                scoreMan.ScoreTrick("Kickflip",50);
+                scoreMan.ScoreMult(3);
                 canFlip = false; // Prevent further flips until the player lands
             }
         }

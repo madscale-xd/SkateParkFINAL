@@ -366,6 +366,7 @@
 "Assets/Scripts/PlayerMovement.cs"
 "Assets/Scripts/RedGreen.cs"
 "Assets/Scripts/SceneButtonManager.cs"
+"Assets/Scripts/ScoreManager.cs"
 "Assets/Scripts/SFXManager.cs"
 "Assets/Scripts/TimerUI.cs"
 -langversion:9.0
