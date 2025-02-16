@@ -192,10 +192,11 @@ public abstract class AbstractSkateboard : MonoBehaviour
         {
             animator.ResetTrigger("Boost");
             animator.Play("Boost", 0, 0f);
+            animator.SetBool("isCrouching", false);
         }
 
         yield return new WaitForSeconds(boostDelay); // Wait for the delay before boosting
-
+        isCrouching = !isCrouching;
         isBoosting = true;
         isBoostOnCooldown = true;
         currentMovementSpeed += boostIncrement; // Add the boost increment to the current movement speed
@@ -218,25 +219,22 @@ public abstract class AbstractSkateboard : MonoBehaviour
     {
         if (animator != null)
         {
-            animator.ResetTrigger("CrouchStart");
-            animator.Play("CrouchStart", 0, 0f);
-            // No need to set the trigger again here as Play already initiates the animation
+            if (!isCrouching) // If not currently crouching, start crouching
+            {
+                animator.ResetTrigger("CrouchStart");
+                animator.SetBool("isCrouching", true);
+                animator.SetTrigger("CrouchStart");
+            }
+            else // If currently crouching, start the crouch to idle animation
+            {
+                animator.SetBool("isCrouching", false);
+                animator.SetTrigger("CrouchToIdle");
+            }
         }
 
         yield return new WaitForSeconds(crouchDelay);
 
-        isCrouching = true;
-        isCrouchOnCooldown = true;
-
-        yield return new WaitForSeconds(crouchDuration);
-        isCrouching = false;
-
-        yield return new WaitForEndOfFrame();
-
-        if (animator != null)
-        {
-            animator.ResetTrigger("CrouchStart");
-        }
+        isCrouching = !isCrouching; // Toggle crouch state
 
         yield return new WaitForSeconds(crouchCooldown);
         isCrouchOnCooldown = false;
@@ -244,17 +242,21 @@ public abstract class AbstractSkateboard : MonoBehaviour
 
     protected virtual void HandleJump()
     {
-        if (Input.GetKeyDown(KeyCode.C) && isGrounded && !isCrouching && !isCrouchOnCooldown)
+        if (Input.GetKeyDown(KeyCode.C) && isGrounded && !isCrouchOnCooldown)
         {
+            isCrouchOnCooldown = true;
             StartCoroutine(CrouchCoroutine()); // Start crouching coroutine
         }
 
-        if (Input.GetKeyDown(KeyCode.Space) && (isGrounded || isGrinding) && !jumpPressed && !isCrouching && !isJumpOnCooldown)
+        if (Input.GetKeyDown(KeyCode.Space) && (isGrounded || isGrinding) && !jumpPressed && !isJumpOnCooldown)
         {
             jumpPressed = true; // Prevent extra jumps
             StartCoroutine(JumpCoroutine());
+
         }
     }
+
+
 
     private IEnumerator JumpCoroutine()
     {
@@ -298,9 +300,28 @@ public abstract class AbstractSkateboard : MonoBehaviour
         if (Input.GetKey(KeyCode.A)) direction -= right;
         if (Input.GetKey(KeyCode.D)) direction += right;
 
+        HandleRotation(); // Call the rotation method
+
         return direction.normalized; // Ensure normalized direction
     }
 
+    private void HandleRotation()
+    {
+        if (Input.GetKey(KeyCode.A))
+        {
+            targetRotation = Quaternion.Euler(transform.eulerAngles + Vector3.up * -rotationSpeed * Time.deltaTime);
+        }
+        else if (Input.GetKey(KeyCode.D))
+        {
+            targetRotation = Quaternion.Euler(transform.eulerAngles + Vector3.up * rotationSpeed * Time.deltaTime);
+        }
+        else
+        {
+            targetRotation = transform.rotation; // Keep current rotation if no input
+        }
+
+        RotateCharacter(); // Apply the rotation
+    }
 
     private void RotateCharacter()
     {
@@ -345,12 +366,12 @@ public abstract class AbstractSkateboard : MonoBehaviour
         hasJumped = true;
         rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
     }
-    
+
 
     // Override OnCollisionEnter to add specific collision behavior for PlayerMovement2
     protected void OnCollisionEnter(Collision collision)
     {
-       if (collision.gameObject.CompareTag("Ragdoller") && currentSpeed >= 7)
+        if (collision.gameObject.CompareTag("Ragdoller") && currentSpeed >= 7)
         {
             Debug.Log("Ragdoller bangga");
             Debug.Log($"Collision detected! currentSpeed: {currentSpeed}");
@@ -365,7 +386,7 @@ public abstract class AbstractSkateboard : MonoBehaviour
 
             // Ensure Rigidbody isn't kinematic
             rb.isKinematic = false;
-            
+
             // Calculate knockback direction
             Vector3 knockbackDirection = (transform.position - collision.GetContact(0).point).normalized;
             knockbackDirection.y += 0.5f; // Add slight upward force
@@ -374,55 +395,78 @@ public abstract class AbstractSkateboard : MonoBehaviour
             rb.AddForce(knockbackDirection * knockbackForce, ForceMode.Impulse);
             rb.WakeUp(); // Ensure physics updates immediately
 
+            // Play hit animation
+            if (animator != null)
+            {
+                Debug.Log("Setting isHit to true");
+                animator.SetBool("isHit", true);
+            }
+            else
+            {
+                Debug.LogWarning("Animator not assigned!");
+            }
+
             // Disable controls for 2 seconds
             StartCoroutine(DisableControlsForSeconds(2f));
+
+            // Ensure isHit is reset after the animation duration
+            StartCoroutine(ResetHitAnimation());
         }
 
-
-        if (collision.gameObject.CompareTag("Grinder"))
-        {
-            grindContacts++; // Increase contact count
-
-            if (grindContacts == 1) // Start grinding only on the first contact
+            if (collision.gameObject.CompareTag("Grinder"))
             {
-                StartGrinding();
-            }
-        }
-        if (collision.gameObject.CompareTag("Ground") || collision.gameObject.CompareTag("Carousel") || collision.gameObject.CompareTag("RedGreen"))
-        {
-            if(isGrinding == true){
-                StopGrinding();
-            }
-            isGrounded = true; // Reset the grounded flag when touching the ground
+                grindContacts++; // Increase contact count
 
-            Debug.Log("grounded");
-            Debug.Log("can flip");
-            StartCoroutine(LandCoroutine());
-
-            if (collision.gameObject.CompareTag("Ground"))
-            {
-                jumpPressed = false;
-                groundContacts++;
-                groundTouch = true;
-                if (rg != null)
+                if (grindContacts == 1) // Start grinding only on the first contact
                 {
-                    rg.StopRedGreen();
+                    StartGrinding();
                 }
-
-                // Reset the flip state once grounded
-                canFlip = true; // Allow the player to flip again after landing
-                hasJumped = false; // Reset the jump state, ensuring another jump is required to flip
             }
-        }
+            if (collision.gameObject.CompareTag("Ground") || collision.gameObject.CompareTag("Carousel") || collision.gameObject.CompareTag("RedGreen"))
+            {
+                if (isGrinding == true)
+                {
+                    StopGrinding();
+                }
+                isGrounded = true; // Reset the grounded flag when touching the ground
 
-        else if (collision.gameObject.CompareTag("Death"))
+                Debug.Log("grounded");
+                Debug.Log("can flip");
+                StartCoroutine(LandCoroutine());
+
+                if (collision.gameObject.CompareTag("Ground"))
+                {
+                    jumpPressed = false;
+                    groundContacts++;
+                    groundTouch = true;
+                    if (rg != null)
+                    {
+                        rg.StopRedGreen();
+                    }
+
+                    // Reset the flip state once grounded
+                    canFlip = true; // Allow the player to flip again after landing
+                    hasJumped = false; // Reset the jump state, ensuring another jump is required to flip
+                }
+            }
+
+            else if (collision.gameObject.CompareTag("Death"))
+            {
+                Destroy(gameObject);
+                spawner.RespawnPlayer();
+            }
+            else if (collision.gameObject.CompareTag("FinishLine"))
+            {
+                SceneManager.LoadScene("EndMenu");
+            }
+    }
+
+    private IEnumerator ResetHitAnimation()
+    {
+        yield return new WaitForSeconds(0.6f); // Adjust the wait time to match your animation length
+        if (animator != null)
         {
-            Destroy(gameObject);
-            spawner.RespawnPlayer();
-        }
-        else if (collision.gameObject.CompareTag("FinishLine"))
-        {
-            SceneManager.LoadScene("EndMenu");
+            animator.SetBool("isHit", false);
         }
     }
 
@@ -669,6 +713,15 @@ public abstract class AbstractSkateboard : MonoBehaviour
         if (grindSpeed < 1f) grindSpeed = 5f; // Ensure a minimum speed
 
         Debug.Log($"Started Grinding! Direction: {grindDirection}, Speed: {grindSpeed}");
+
+        if (animator != null)
+        {
+            animator.SetBool("isGrinding", true);
+        }
+        else
+        {
+            Debug.LogWarning("Animator not assigned!");
+        }
     }
 
     void StopGrinding()
@@ -687,6 +740,15 @@ public abstract class AbstractSkateboard : MonoBehaviour
         rb.velocity = Vector3.zero; // Stop movement
 
         Debug.Log("Stopped Grinding! Resetting position.");
+
+        if (animator != null)
+        {
+            animator.SetBool("isGrinding", false);
+        }
+        else
+        {
+            Debug.LogWarning("Animator not assigned!");
+        }
     }
 
     void FixedUpdate()

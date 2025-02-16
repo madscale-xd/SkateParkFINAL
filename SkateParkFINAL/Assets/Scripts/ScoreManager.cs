@@ -13,29 +13,41 @@ public class ScoreManager : MonoBehaviour
     private float totalScore;
     private float trickTimer = 0f; // Timer to track trick inactivity
     private float trickTimeout = 5f; // 5-second timeout
-    
+
     public TextMeshProUGUI flatText;
     public TextMeshProUGUI multText;
     public TextMeshProUGUI scoreText;
+    public TextMeshProUGUI trickNameText; // Add this line
+    public float trickDisplayDuration = 2f; // Duration for trick name display
+    public float popScale = 1.5f; // Scale for the popping effect
+
+    private float currentDisplayedScore; // Add this line
+    public float tickDuration = 0.5f; // Duration for the score ticking effect
+    private Coroutine scoreTickCoroutine; // Add this line
+
+
+    private Coroutine trickDisplayCoroutine;
 
     void Start()
     {
         UpdateFlatText();
         UpdateMultText();
         UpdateScoreText();
+        trickNameText.gameObject.SetActive(false); // Hide text initially
     }
 
     void Update()
     {
         // Only track time if a trick has been performed
-        if (flatt > 0) 
+        if (flatt > 0)
         {
             trickTimer += Time.deltaTime;
-            
+
             if (trickTimer >= trickTimeout)
             {
                 Debug.Log("Trick timeout reached! Calculating score...");
                 CalculateScore();
+                ResetTrickName(); // Reset trick name when the trick timer expires
             }
         }
     }
@@ -84,8 +96,14 @@ public class ScoreManager : MonoBehaviour
         UpdateFlatText();
 
         trickTimer = 0f;
-    }
 
+        // Display the trick name
+        if (trickDisplayCoroutine != null)
+        {
+            StopCoroutine(trickDisplayCoroutine);
+        }
+        trickDisplayCoroutine = StartCoroutine(DisplayTrickName(name));
+    }
 
     public void ScoreMult(float mult)
     {
@@ -109,7 +127,7 @@ public class ScoreManager : MonoBehaviour
 
         flatt += 5;
         UpdateFlatText();
-        
+
         // No timer reset here, meaning it doesn't affect trick combos
     }
 
@@ -119,7 +137,13 @@ public class ScoreManager : MonoBehaviour
         {
             totalComboScore = flatt * multt;
             totalScore += totalComboScore;
-            UpdateScoreText();
+
+            // Start the score ticking effect
+            if (scoreTickCoroutine != null)
+            {
+                StopCoroutine(scoreTickCoroutine);
+            }
+            scoreTickCoroutine = StartCoroutine(AnimateScore(totalScore));
 
             // Reset combo
             flatt = 0;
@@ -129,6 +153,25 @@ public class ScoreManager : MonoBehaviour
             UpdateMultText();
         }
     }
+
+    private IEnumerator AnimateScore(float targetScore)
+    {
+        float startScore = currentDisplayedScore;
+        float elapsedTime = 0f;
+
+        while (elapsedTime < tickDuration)
+        {
+            currentDisplayedScore = Mathf.Lerp(startScore, targetScore, elapsedTime / tickDuration);
+            scoreText.text = Mathf.RoundToInt(currentDisplayedScore).ToString();
+            elapsedTime += Time.deltaTime;
+            yield return null;
+        }
+
+        currentDisplayedScore = targetScore;
+        scoreText.text = Mathf.RoundToInt(currentDisplayedScore).ToString();
+    }
+
+
 
     private void UpdateFlatText()
     {
@@ -143,5 +186,45 @@ public class ScoreManager : MonoBehaviour
     private void UpdateScoreText()
     {
         scoreText.text = totalScore.ToString();
+    }
+
+    private IEnumerator DisplayTrickName(string name)
+    {
+        if (trickNameText != null)
+        {
+            trickNameText.gameObject.SetActive(true);
+            trickNameText.text = name;
+
+            // Popping effect
+            Vector3 originalScale = trickNameText.transform.localScale;
+            Vector3 popScale = originalScale * this.popScale;
+            float popDuration = 0.2f;
+
+            // Enlarge
+            for (float t = 0; t < 1f; t += Time.deltaTime / popDuration)
+            {
+                trickNameText.transform.localScale = Vector3.Lerp(originalScale, popScale, t);
+                yield return null;
+            }
+
+            // Shrink back
+            for (float t = 0; t < 1f; t += Time.deltaTime / popDuration)
+            {
+                trickNameText.transform.localScale = Vector3.Lerp(popScale, originalScale, t);
+                yield return null;
+            }
+
+            // Display for the given duration
+            yield return new WaitForSeconds(trickDisplayDuration);
+            trickNameText.gameObject.SetActive(false); // Hide after duration
+        }
+    }
+
+    private void ResetTrickName()
+    {
+        if (trickNameText != null)
+        {
+            trickNameText.gameObject.SetActive(false);
+        }
     }
 }
