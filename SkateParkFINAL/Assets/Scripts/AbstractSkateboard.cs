@@ -4,6 +4,8 @@ using UnityEngine.SceneManagement;
 
 public abstract class AbstractSkateboard : MonoBehaviour
 {
+    [SerializeField] private float maxSpeed = 12f; 
+    public SFXManager sfxMan;
     public float knockbackForce = 1000f;
     private bool playerControlsEnabled = true;
     private float previousYRotation;
@@ -11,7 +13,7 @@ public abstract class AbstractSkateboard : MonoBehaviour
     private bool hasStartedTrackingRotation = false;
     protected ScoreManager scoreMan;
     private bool jumpPressed = false;
-    private float upwardForce = 50f;
+    private float upwardForce = 100f;
     private Vector3 grindDirection;
     private float grindSpeed;
     private int groundContacts = 0;
@@ -21,9 +23,6 @@ public abstract class AbstractSkateboard : MonoBehaviour
     public float health;
     public float speed;
     public float specialMoveGauge;
-    
-    private DeathAndRespawn spawner;
-    private RedGreen rg;
     private Coroutine resetSpeedCoroutine;
 
     // Core movement and jump variables
@@ -61,7 +60,7 @@ public abstract class AbstractSkateboard : MonoBehaviour
     [SerializeField] private float crouchDelay = 0.2f;
     [SerializeField] private float crouchDuration = 0.2f;
     [SerializeField] private float crouchCooldown = 0f;
-    [SerializeField] private float jumpCooldown = 2f;
+    [SerializeField] private float jumpCooldown = 0.5f;
 
     private bool isBoostOnCooldown = false;
     private bool isCrouchOnCooldown = false;
@@ -102,15 +101,10 @@ public abstract class AbstractSkateboard : MonoBehaviour
         targetRotation = transform.rotation;
         originalRotation = transform.rotation;
 
-        spawner = GameObject.Find("Skatepark").GetComponent<DeathAndRespawn>();
-        rg = GameObject.Find("RedGreen").GetComponent<RedGreen>();
-
         // Store the original rotation
         originalRotation = skateboardD.rotation;
-
-        rb = GetComponent<Rigidbody>();
-        targetRotation = transform.rotation;
         LoadPlayerData();
+        sfxMan = GameObject.Find("Camera").GetComponent<SFXManager>();
     }
 
     public void SavePlayerData()
@@ -171,7 +165,7 @@ public abstract class AbstractSkateboard : MonoBehaviour
         {
             if (isBoosting || currentMovementSpeed > 0f)
             {
-                currentSpeed = currentMovementSpeed;
+                currentSpeed = Mathf.Clamp(currentMovementSpeed, 0f, maxSpeed); // 👈 Clamp speed
                 currentMovementSpeed = Mathf.MoveTowards(currentMovementSpeed, 0f, boostDecayRate * Time.deltaTime);
             }
             else
@@ -188,6 +182,7 @@ public abstract class AbstractSkateboard : MonoBehaviour
 
     private IEnumerator Boost()
     {
+        sfxMan.PlaySFX(3);
         if (animator != null)
         {
             animator.ResetTrigger("Boost");
@@ -363,6 +358,7 @@ public abstract class AbstractSkateboard : MonoBehaviour
 
     private void Jump()
     {
+        sfxMan.PlaySFX(0);
         hasJumped = true;
         rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
     }
@@ -373,7 +369,9 @@ public abstract class AbstractSkateboard : MonoBehaviour
     {
         if (collision.gameObject.CompareTag("Ragdoller") && currentSpeed >= 7)
         {
+            sfxMan.PlaySFX(7);
             Debug.Log("Ragdoller bangga");
+            scoreMan.CalculateScore();
             Debug.Log($"Collision detected! currentSpeed: {currentSpeed}");
 
             // Disable movement input
@@ -420,13 +418,18 @@ public abstract class AbstractSkateboard : MonoBehaviour
                 if (grindContacts == 1) // Start grinding only on the first contact
                 {
                     StartGrinding();
+                    hasJumped = false;
+                    jumpPressed = false;
+                    canFlip = true;
                 }
             }
-            if (collision.gameObject.CompareTag("Ground") || collision.gameObject.CompareTag("Carousel") || collision.gameObject.CompareTag("RedGreen"))
+            if (collision.gameObject.CompareTag("Ground"))
             {
+                sfxMan.PlaySFX(2);
                 if (isGrinding == true)
                 {
                     StopGrinding();
+                    sfxMan.StopSFX(5);
                 }
                 isGrounded = true; // Reset the grounded flag when touching the ground
 
@@ -439,25 +442,11 @@ public abstract class AbstractSkateboard : MonoBehaviour
                     jumpPressed = false;
                     groundContacts++;
                     groundTouch = true;
-                    if (rg != null)
-                    {
-                        rg.StopRedGreen();
-                    }
 
                     // Reset the flip state once grounded
                     canFlip = true; // Allow the player to flip again after landing
                     hasJumped = false; // Reset the jump state, ensuring another jump is required to flip
                 }
-            }
-
-            else if (collision.gameObject.CompareTag("Death"))
-            {
-                Destroy(gameObject);
-                spawner.RespawnPlayer();
-            }
-            else if (collision.gameObject.CompareTag("FinishLine"))
-            {
-                SceneManager.LoadScene("EndMenu");
             }
     }
 
@@ -525,34 +514,6 @@ public abstract class AbstractSkateboard : MonoBehaviour
         }
     }
 
-
-
-    protected void OnCollisionStay(Collision collision)
-    {
-        if (collision.gameObject.CompareTag("Carousel"))
-        {
-            moveSpeed = 2.5f;
-            sprintSpeed = 4f;
-
-            if (resetSpeedCoroutine != null)
-            {
-                StopCoroutine(resetSpeedCoroutine);
-                resetSpeedCoroutine = null;
-            }
-        }
-        else if (collision.gameObject.CompareTag("RedGreen"))
-        {
-            moveSpeed = 1.5f;
-            sprintSpeed = 3f;
-
-            if (resetSpeedCoroutine != null)
-            {
-                StopCoroutine(resetSpeedCoroutine);
-                resetSpeedCoroutine = null;
-            }
-        }
-    }
-
     protected void OnCollisionExit(Collision collision)
     {
        if (collision.gameObject.CompareTag("Grinder"))
@@ -574,14 +535,6 @@ public abstract class AbstractSkateboard : MonoBehaviour
             {
                 StartCoroutine(FallCoroutine());
             }
-        }
-        if (collision.gameObject.CompareTag("Carousel"))
-        {
-            resetSpeedCoroutine = StartCoroutine(ResetSpeedAfterDelay());
-        }
-        else if (collision.gameObject.CompareTag("RedGreen"))
-        {
-            resetSpeedCoroutine = StartCoroutine(ResetSpeedAfterDelay());
         }
     }
 
@@ -637,7 +590,7 @@ public abstract class AbstractSkateboard : MonoBehaviour
         // Update the isGrounded flag based on collision detection or raycast
         // Example implementation:
         RaycastHit hit;
-        float distanceToGround = 1.0f; // Adjust based on your character's height
+        float distanceToGround = 0.5f; // Adjust based on your character's height
         if (Physics.Raycast(transform.position, Vector3.down, out hit, distanceToGround))
         {
             isGrounded = hit.collider != null;
@@ -754,8 +707,11 @@ public abstract class AbstractSkateboard : MonoBehaviour
     void FixedUpdate()
     {
         scoreMan = GameObject.Find("CanvasUI").GetComponent<ScoreManager>();
+        cameraTransform = GameObject.Find("Camera")?.transform;
+
         if (isGrinding)
         {
+            sfxMan.LoopSFX(5);
             grindTimer += Time.deltaTime;
 
             if (grindTimer >= grindInterval)
@@ -765,10 +721,15 @@ public abstract class AbstractSkateboard : MonoBehaviour
                 Debug.Log("Grind Scored");
             }
         }
+
+        if(isGrounded && currentMovementSpeed > 0 && moveSpeed > 0){
+            sfxMan.LoopSFX(6);
+        }else{
+            sfxMan.StopSFX(6);
+        }
         
         if(!isGrounded){
             airTimer += Time.deltaTime;
-
             if (airTimer >= airInterval)
             {
                 airTimer = 0f; // Reset timer
@@ -814,8 +775,8 @@ public abstract class AbstractSkateboard : MonoBehaviour
 
     private void ApplyUpwardForce()
     {
-        scoreMan.ScoreTrick("Halfpipe",50);
-        scoreMan.ScoreMult(3);
+        scoreMan.ScoreTrick("Halfpipe",60);
+        scoreMan.ScoreMult(5);
         rb.velocity = new Vector3(rb.velocity.x, 2f, rb.velocity.z); // Reset vertical velocity to ensure consistent jump
         rb.AddForce(Vector3.up * upwardForce, ForceMode.Impulse); // Apply instant upward force
     }

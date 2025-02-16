@@ -26,6 +26,7 @@ public class CameraFollow : MonoBehaviour
 
     void LateUpdate()
     {
+        target = GameObject.Find("CameraFollow")?.transform;
         if (target != null)
         {
             // Mouse input for horizontal movement (left-right rotation)

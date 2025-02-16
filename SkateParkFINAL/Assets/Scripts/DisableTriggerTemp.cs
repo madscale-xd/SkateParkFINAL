@@ -24,7 +24,7 @@ public class DisableTriggerTemp : MonoBehaviour
         if (boxCollider != null)
         {
             boxCollider.enabled = false;
-            yield return new WaitForSeconds(10f);
+            yield return new WaitForSeconds(20f);
             boxCollider.enabled = true;
         }
     }

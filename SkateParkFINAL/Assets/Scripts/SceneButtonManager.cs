@@ -6,20 +6,19 @@ using TMPro;
 
 public class SceneButtonManager : MonoBehaviour
 {
-    public TextMeshProUGUI playerCountText;
+    private float totalPointz;
+    public TextMeshProUGUI totalPointsText;
     // Start is called before the first frame update
     void Start()
     {
-         Cursor.visible = true;
+        Cursor.visible = true;
+        totalPointz = TimerUI.totalPoints;
+        UpdateFinalScoreText();
     }
 
     // Update is called once per frame
     void Update()
     {
-        if (playerCountText != null)
-        {
-            playerCountText.text = "PLAYERS SURVIVED:\n " + DeathAndRespawn.playerCount;
-        }
     }
 
     public void QuitGame()
@@ -29,8 +28,7 @@ public class SceneButtonManager : MonoBehaviour
 
     public void LoadGame()
     {
-        DeathAndRespawn.playerCount = 457f;
-        SceneManager.LoadScene("Skatepark");
+        SceneManager.LoadScene("SkateparkFinal");
     }
 
     public void LoadRetry()
@@ -38,8 +36,14 @@ public class SceneButtonManager : MonoBehaviour
         SceneManager.LoadScene("EndMenu");
     }
 
-     public void LoadMenu()
+    public void LoadMenu()
     {
         SceneManager.LoadScene("MainMenu");
+    }
+
+    public void UpdateFinalScoreText(){
+        if(totalPointsText!=null){
+            totalPointsText.text = "Your total score:\n"+totalPointz;
+        }
     }
 }

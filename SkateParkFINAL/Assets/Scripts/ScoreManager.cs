@@ -5,6 +5,7 @@ using TMPro;
 
 public class ScoreManager : MonoBehaviour
 {
+    private SFXManager sfxMan;
     private Queue<string> trickHistory = new Queue<string>(5); // Stores the last 5 tricks
     private string currentTrick = "";
     private float flatt = 0f;
@@ -34,6 +35,7 @@ public class ScoreManager : MonoBehaviour
         UpdateMultText();
         UpdateScoreText();
         trickNameText.gameObject.SetActive(false); // Hide text initially
+        sfxMan = GameObject.Find("Camera").GetComponent<SFXManager>();
     }
 
     void Update()
@@ -55,6 +57,7 @@ public class ScoreManager : MonoBehaviour
     public void ScoreTrick(string name, float flat)
     {
         Debug.Log($"Trick Scored | Current Trick: {currentTrick} | New Trick: {name}");
+        sfxMan.PlaySFX(4);
 
         // Determine how many previous tricks to check based on multt value
         int checkCount = 1; // Default to checking only the last trick
@@ -226,5 +229,10 @@ public class ScoreManager : MonoBehaviour
         {
             trickNameText.gameObject.SetActive(false);
         }
+    }
+
+    public float ExportTotalScore(){
+        CalculateScore();
+        return totalScore;
     }
 }
